@@ -1,0 +1,1 @@
+#### Miro database schema: [Board](https://miro.com/app/board/uXjVPtiHTXU=/?share_link_id=200830276136)
