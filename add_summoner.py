@@ -39,7 +39,7 @@ def add_last_match_to_db(last_match):
                 rank = league['rank']
                 leaguePoints = league['leaguePoints']
 
-                participant['rank'] = {
+                participant['league'] = {
                     'tier': tier,
                     'rank': rank,
                     'leaguePoints': leaguePoints
