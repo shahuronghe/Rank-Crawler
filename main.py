@@ -46,8 +46,20 @@ SUMMONERS = [
         "id": "5r6plhza1fMe20t8Cq3e-9ACtSiHNzIiiGIsPPdfeUkATYA", # dying alive
         "puuid": "DciWwrGbDNmMX48dOmyc2U7to5HJCJAagc1tZwPh6cWs4Frxdps-_vBHEk5NDE9QkvzQJRnjj06ygQ"
     }
-
 ]
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 
 def save_rank(queue, summoner_puuid, tier, rank, lp):
     if queue == "RANKED_SOLO_5x5":
@@ -74,7 +86,7 @@ def save_rank(queue, summoner_puuid, tier, rank, lp):
     c.execute(f"INSERT INTO {tabel} VALUES (?, ?, ?, ?, ?)", (summoner_puuid, int(time.time()), tier, rank, lp))
     conn.commit()
     conn.close()
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Successfully saved rank for {summoner_puuid}")
+    print(f"{bcolors.OKGREEN}[{time.strftime('%Y-%m-%d %H:%M:%S')}] Successfully saved rank for {summoner_puuid}{bcolors.ENDC}")
 
 def check_ranks():
     print()
@@ -83,20 +95,52 @@ def check_ranks():
         summoner_puuid = summoner["puuid"]
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking rank for {summoner_puuid}")
         url = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_id}?api_key={RIOT_API_KEY}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            for queue in data:
-                if queue["queueType"] == "RANKED_SOLO_5x5" or queue["queueType"] == "RANKED_FLEX_SR":
-                    tier = queue["tier"]
-                    rank = queue["rank"]
-                    lp = queue["leaguePoints"]
-                    queue_type = queue["queueType"]
-                    save_rank(queue_type, summoner_puuid, tier, rank, lp)
-        else:
-            print(f"Error getting rank for {summoner_puuid}")
-            print(response.text)
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            print(f"{bcolors.FAIL}Error getting rank for {summoner_puuid}: {err}{bcolors.ENDC}")
+            continue
+        data = response.json()
+        for queue in data:
+            if queue["queueType"] == "RANKED_SOLO_5x5" or queue["queueType"] == "RANKED_FLEX_SR":
+                tier = queue["tier"]
+                rank = queue["rank"]
+                lp = queue["leaguePoints"]
+                queue_type = queue["queueType"]
+                save_rank(queue_type, summoner_puuid, tier, rank, lp)
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Rank check complete")
 
+
+
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
+check_ranks()
 def main():
     check_ranks()
 
