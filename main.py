@@ -77,11 +77,12 @@ def save_rank(queue, summoner_puuid, tier, rank, lp):
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Successfully saved rank for {summoner_puuid}")
 
 def check_ranks():
+    print()
     for summoner in SUMMONERS:
         summoner_id = summoner["id"]
         summoner_puuid = summoner["puuid"]
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking rank for {summoner_id}")
-        url = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_id}?api_key={RIOT_API_KEY}"
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking rank for {summoner_puuid}")
+        url = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_puuid}?api_key={RIOT_API_KEY}"
         response = requests.get(url)
         if response.status_code == 200:
             data = response.json()
@@ -93,7 +94,7 @@ def check_ranks():
                     queue_type = queue["queueType"]
                     save_rank(queue_type, summoner_puuid, tier, rank, lp)
         else:
-            print(f"Error getting rank for {summoner_id}")
+            print(f"Error getting rank for {summoner_puuid}")
             print(response.text)
 
 def main():
