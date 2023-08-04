@@ -80,6 +80,7 @@ def check_ranks():
     for summoner in SUMMONERS:
         summoner_id = summoner["id"]
         summoner_puuid = summoner["puuid"]
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking rank for {summoner_id}")
         url = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_id}?api_key={RIOT_API_KEY}"
         response = requests.get(url)
         if response.status_code == 200:
