@@ -167,7 +167,7 @@ def update_summoner(summoner_name, platform):
         return
     
     summoner.pop("_id")
-    if summoner == summoner_data:
+    if sorted(summoner) == sorted(summoner_data):
         print("Summoner-data is already up to date")
 
     else:
