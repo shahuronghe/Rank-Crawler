@@ -8,6 +8,8 @@ import requests
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
+from utils.routing import platform_to_region
+
 # Setup
 load_dotenv()
 RIOT_API_KEY = os.getenv('RIOT_API_KEY')
@@ -28,41 +30,7 @@ except Exception as e:
     print(e)
 
 
-def add_summoner(summoner_name, platform):
-    """
-    Get the summoner data from the Riot API and add enrich it with the rank data from the database
-    """
-    url = f"https://{platform}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{summoner_name}?api_key={RIOT_API_KEY}"
-    response = requests.get(url)
-    summoner_data = response.json()
-
-    collection = client["rank-crawler"]["summoners"]
-
-    # Check if summoner already exists in database
-    summoner = collection.find_one({"id": summoner_data["id"]})
-    if summoner:
-        return
-
-    # Get rank
-    url = f"https://{platform}.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_data['id']}?api_key={RIOT_API_KEY}"
-    response = requests.get(url)
-    rank_data = response.json()
-    
-    # remove unnecessary data from rank_data
-    if rank_data:
-        for rank in rank_data:
-            rank.pop("summonerId")
-            rank.pop("summonerName")
-
-    # Add rank to summoner_data
-    summoner_data["rank"] = rank_data
-
-
-    # Add summoner to database
-    collection.insert_one(summoner_data)
-
-
-def save_match(match_id):
+def save_match(match_id, platform):
     """
     Get the match data from the Riot API
     for each summoner in the match that is in the database get the rank data and add it to the match data
@@ -74,8 +42,7 @@ def save_match(match_id):
         "leaguePoints": 100,
     }
     """
-    # TODO replace the static europe with the platform
-    url = f"https://europe.api.riotgames.com/lol/match/v5/matches/{match_id}?api_key={RIOT_API_KEY}"
+    url = f"https://{platform_to_region(platform)}.api.riotgames.com/lol/match/v5/matches/{match_id}?api_key={RIOT_API_KEY}"
     response = requests.get(url)
     match_data = response.json()
 
@@ -117,7 +84,7 @@ def save_match(match_id):
     print("    Added match to database")
 
 
-    url = f"https://europe.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline?api_key={RIOT_API_KEY}" # TODO replace the static europe with the platform
+    url = f"https://{platform_to_region(platform)}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline?api_key={RIOT_API_KEY}"
     response = requests.get(url)
     timeline_data = response.json()
     
@@ -177,7 +144,7 @@ def update_summoner(summoner_name, platform):
 
     # check if summoner has played new matches
     # TODO replace the static europe with the platform
-    url = f"https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/{summoner_data['puuid']}/ids?start=0&count=1&api_key={RIOT_API_KEY}"
+    url = f"https://{platform_to_region(platform)}.api.riotgames.com/lol/match/v5/matches/by-puuid/{summoner_data['puuid']}/ids?start=0&count=1&api_key={RIOT_API_KEY}"
     response = requests.get(url)
     match_ids = response.json()
 
@@ -189,7 +156,7 @@ def update_summoner(summoner_name, platform):
         return
     
     # Get the match data
-    save_match(match_ids[0])
+    save_match(match_ids[0], platform)
 
 
 def update_all_summoners():
@@ -200,7 +167,7 @@ def update_all_summoners():
     summoners = summoners_collection.find()
     for summoner in summoners:
         print(f"Updating {summoner['name']}")
-        update_summoner(summoner["name"], "euw1") # TODO replace the static euw1 with the platform
+        update_summoner(summoner["name"], summoner["platform"])
 
 
 def main():
