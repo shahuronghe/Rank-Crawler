@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 from enum import Enum
+from datetime import datetime
 
 import requests
 
@@ -22,7 +23,7 @@ client = MongoClient(uri, server_api=ServerApi('1'))
 # Send a ping to confirm a successful connection
 try:
     client.admin.command('ping')
-    print("Pinged your deployment. You successfully connected to MongoDB!")
+    print("Pinged MongoDB!")
 except Exception as e:
     print(e)
 
@@ -40,7 +41,6 @@ def add_summoner(summoner_name, platform):
     # Check if summoner already exists in database
     summoner = collection.find_one({"id": summoner_data["id"]})
     if summoner:
-        print("Summoner already exists in database")
         return
 
     # Get rank
@@ -60,7 +60,6 @@ def add_summoner(summoner_name, platform):
 
     # Add summoner to database
     collection.insert_one(summoner_data)
-    print("Summoner added to database")
 
 
 def save_match(match_id):
@@ -85,7 +84,7 @@ def save_match(match_id):
     # Check if match already exists in database
     match = collection.find_one({"metadata.matchId": match_data["metadata"]["matchId"]})
     if match:
-        print("Match already exists in database")
+        print("    Match already exists in database")
         return
     
     # Check if the match is a ranked match
@@ -115,7 +114,7 @@ def save_match(match_id):
 
     # Add match to database
     collection.insert_one(match_data)
-    print("Match added to database")
+    print("    Added match to database")
 
 
     url = f"https://europe.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline?api_key={RIOT_API_KEY}" # TODO replace the static europe with the platform
@@ -128,12 +127,12 @@ def save_match(match_id):
     # Check if timeline already exists in database
     timeline = collection.find_one({"metadata.matchId": timeline_data["metadata"]["matchId"]})
     if timeline:
-        print("Timeline already exists in database")
+        print("    Timeline already exists in database")
         return
     
     # Add timeline to database
     collection.insert_one(timeline_data)
-    print("Timeline added to database")
+    print("    Added timeline to database")
 
 
 def update_summoner(summoner_name, platform):
@@ -146,6 +145,7 @@ def update_summoner(summoner_name, platform):
 
     summoners_collection = client["rank-crawler"]["summoners"]
 
+    print("    Getting rank data")
     # Get rank
     url = f"https://{platform}.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_data['id']}?api_key={RIOT_API_KEY}"
     response = requests.get(url)
@@ -163,22 +163,17 @@ def update_summoner(summoner_name, platform):
     # Check if summoner exists in database
     summoner = summoners_collection.find_one({"id": summoner_data["id"]})
     if not summoner:
-        print("Summoner does not exist in database")
+        print("    Summoner is not added to database")
         return
     
     summoner.pop("_id")
     if sorted(summoner) == sorted(summoner_data):
-        print("Summoner-data is already up to date")
+        print("    Summoner is up to date")
+        pass
 
     else:
         summoners_collection.update_one({"id": summoner_data["id"]}, {"$set": summoner_data})
-        print("summoner:")
-        print(summoner)
-        print()
-        print("summoner_data:")
-        print(summoner_data)
-        # print("Summoner data updated")
-
+        print("    Updated summoner data")
 
     # check if summoner has played new matches
     # TODO replace the static europe with the platform
@@ -190,7 +185,7 @@ def update_summoner(summoner_name, platform):
 
     # Check if summoner has played new matches
     if matches_collection.find_one({"metadata.matchId": match_ids[0]}):
-        print("Summoner has not played new matches")
+        print("    Summoner has not played new matches")
         return
     
     # Get the match data
@@ -204,6 +199,7 @@ def update_all_summoners():
     summoners_collection = client["rank-crawler"]["summoners"]
     summoners = summoners_collection.find()
     for summoner in summoners:
+        print(f"Updating {summoner['name']}")
         update_summoner(summoner["name"], "euw1") # TODO replace the static euw1 with the platform
 
 
