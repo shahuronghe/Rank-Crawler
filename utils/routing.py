@@ -37,11 +37,9 @@ platform2cass_regions = {
 }
 
 
+
+
+
 def platform_to_region(plattform: str) -> str:
     '''Return the region correspondent to a given platform'''
     return platform2regions[plattform]
-
-
-def platform_to_cass_region(plattform: str) -> str:
-    '''Return the region correspondent to a given platform'''
-    return platform2cass_regions[plattform]

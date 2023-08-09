@@ -5,9 +5,9 @@ import sys
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-import cassiopeia as cass
+from riotwatcher import LolWatcher, ApiError
 
-from utils.routing import platform_to_cass_region
+from utils.routing import platform_to_cass_region, platform_to_cass_continent
 
 # Setup
 load_dotenv()
@@ -27,7 +27,7 @@ try:
 except Exception as e:
     print(e)
 
-cass.set_riot_api_key(RIOT_API_KEY)
+lol_watcher = LolWatcher(RIOT_API_KEY)
 
 
 def save_summoner(summoner_name: str, platform: str):
@@ -41,28 +41,19 @@ def save_summoner(summoner_name: str, platform: str):
 
 
     # Get summoner data
-    cass_summoner = cass.get_summoner(name=summoner_name, region=platform_to_cass_region(platform))
-    cass_summoner.load()
-    summoner_dict = cass_summoner.to_dict()
-    summoner_dict.pop('region')
-    summoner_dict['platform'] = platform
+    summoner = lol_watcher.summoner.by_name(platform, summoner_name)
+    summoner['platform'] = platform
 
 
-    # Get the rank data of the summoner
-    cass_rank = cass_summoner.league_entries
-    rank_dict = []
-    for rank in cass_rank:
-        rank_dict.append(rank.to_dict())
+    # Get the league data
+    league_entries = lol_watcher.league.by_summoner(platform, summoner['id'])
 
-        # Remove unnecessary data from rank_dict
-        rank_dict[-1].pop('summonerName')
-        rank_dict[-1].pop('summonerId')
-        rank_dict[-1].pop('region')
-    summoner_dict['rank'] = rank_dict
+    # Merge the league data into the summoner data
+    summoner['league_entries'] = league_entries
 
     # Save summoner to database
     summoner_collection = client['rank-crawler']['summoners']
-    summoner_collection.insert_one(summoner_dict)
+    summoner_collection.insert_one(summoner)
 
 
 save_summoner('G5 Easy', 'euw1')
