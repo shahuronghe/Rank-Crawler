@@ -17,7 +17,31 @@ platform2regions = {
     "vn2": "sea",
 }
 
+platform2cass_regions = {
+    "br1": "BR",
+    "eun1": "EUNE",
+    "euw1": "EUW",
+    "jp1": "JP",
+    "kr": "KR",
+    "la1": "LAN",
+    "la2": "LAS",
+    "na1": "NA",
+    "oc1": "OCE",
+    "tr1": "TR",
+    "ru": "RU",
+    "ph2": "PH",
+    "sg2": "SG",
+    "th2": "TH",
+    "tw2": "TW",
+    "vn2": "VN",
+}
+
 
 def platform_to_region(plattform: str) -> str:
     '''Return the region correspondent to a given platform'''
     return platform2regions[plattform]
+
+
+def platform_to_cass_region(plattform: str) -> str:
+    '''Return the region correspondent to a given platform'''
+    return platform2cass_regions[plattform]
