@@ -75,8 +75,8 @@ def update_all_summoners(client, lol_watcher):
 
         # Show what exactly has changed
         for key in summoner_data:
-            if summoner_data[key] != summoner[key]:
-                logging.info(f'{key} has changed from {summoner[key]} to {summoner_data[key]}')
+            if summoner_data[key] != summoner_copy[key]:
+                logging.info(f'{key} has changed from {summoner_copy[key]} to {summoner_data[key]}')
 
         # Update summoner data
         summoner_collection.update_one({'_id': summoner['_id']}, {'$set': summoner_data})
