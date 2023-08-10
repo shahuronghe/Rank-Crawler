@@ -7,7 +7,6 @@ from pymongo.server_api import ServerApi
 
 from riotwatcher import LolWatcher, ApiError
 
-from utils.routing import platform_to_cass_region, platform_to_cass_continent
 
 # Setup
 load_dotenv()
