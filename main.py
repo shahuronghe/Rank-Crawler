@@ -1,125 +1,108 @@
-import sqlite3
-import requests
+import logging
 import time
 import os
-from dotenv import load_dotenv
 import schedule
+from dotenv import load_dotenv
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+from riotwatcher import LolWatcher, ApiError
 
 
+'''
+This script updates summoner and league data for registered summoners in a MongoDB database using the Riot Games API.
+It retrieves summoner information and league entries for each summoner, compares the data with the existing records in the database,
+and updates the records if any changes are detected. The script uses the RiotWatcher library for interacting with the Riot Games API,
+and it schedules periodic updates for all summoners at specified intervals.
+'''
+
+# Load environment variables
 load_dotenv()
 RIOT_API_KEY = os.getenv('RIOT_API_KEY')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
 
-SUMMONERS = [
-    {
-        "id": "Esssl3ai9Cyz-n3-QkcXtgUrkG7eR2rWOYcbbymH2wptaz8", # G5 Easy
-        "puuid": "eL5FT_-iar7RRvNBDsj5arXPUTWdkfrJTFhReKgDHNBizr37dHJf9ruCdfrJZmWpamye3L-W67aShw"
-    },
-    {
-        "id": "4E83JFYB1u3IXauxJEsBTuVef3MdiJhGCjoeI1Oum0sTVQk0", # WeingottBachus
-        "puuid": "DD9JnerCOP2Ag49m3HWlgcWuiPYpGp9Mpldd5UPuo57VNKguh3_eLySKBQ90uP8hkJlFBOP7x24CDQ"
-    },
-    {
-        "id": "9mMuO06QQxEyFY-pmoxQgEidD-_vBgX_TluPPUKBfG5Vfkw", # Shinzoυ
-        "puuid": "kI861zvO4_5X6gfpbcYTqSh6N4miWNffv6qqS29PulV3nWy9wOchnO2lfRMDKydxzwWzUMh2MWGAIg"
-    },
-    {
-        "id": "OToOysaeJ_zY6ZnhCHLwBRPxGcpKkbvEOkM7ia2Y4KWjmmxQ", # kiting femboys
-        "puuid": "xLoyhMEWCKwyxLY9-aovS3WxuFwaZk3MAwCWeDV0lhE-Av_NiV0t-_Z4PYdY8BV-aYgDA9wod8xX2Q"
-    },
-    {
-        "id": "wCslB5tO7mJZt_nWQPy-tf-H_0Wglz_q4d4K76L5EPHJs_XvdqzdSLGeZg", # PrinzessinBubbIe
-        "puuid": "MujvQi2r1ukKYB0We1WQj1g9zuDF8L3mX6y5xGl59QoUQCvuuT4OFahVIuH8Bbq-6jgQ8gHjKuJ10g"
-    },
-    {
-        "id": "80Eyjcf06d_aZSnrOXR85GWJKR7K_9m63XYhZVm-MBTlunhC", # Zukyami
-        "puuid": "8EnGr9cgFf5vxShBrwLpToRH_202wXcDwSsE6X_iXkpaQR0o4uSXHVBXKGRlp-BSvYrBwMlHtEXO7g"
-    },
-    {
-        "id": "JGx-65ycqCkFQ4EcFU-8byy0Iex9DeLQahV24tqfL3i1IKGb", # qyiugweqyeh
-        "puuid": "J2YqSWNftal_UKOV9TK7Wb2Z8zWOcdUwvMYqowwMreVqqjaPITvxaLoC_qe1l8x7kNiRuqnJFujFMQ"
-    },
-    {
-        "id": "5r6plhza1fMe20t8Cq3e-9ACtSiHNzIiiGIsPPdfeUkATYA", # tiger woods 1
-        "puuid": "DciWwrGbDNmMX48dOmyc2U7to5HJCJAagc1tZwPh6cWs4Frxdps-_vBHEk5NDE9QkvzQJRnjj06ygQ"
-    },
-    {
-        "id": "5r6plhza1fMe20t8Cq3e-9ACtSiHNzIiiGIsPPdfeUkATYA", # dying alive
-        "puuid": "DciWwrGbDNmMX48dOmyc2U7to5HJCJAagc1tZwPh6cWs4Frxdps-_vBHEk5NDE9QkvzQJRnjj06ygQ"
-    }
-]
+# Configure logging
+logging.basicConfig(filename='logs/main.log', format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+def setup_mongodb_connection(db_user, db_password):
+    '''Set up MongoDB connection.'''
+    uri = f'mongodb+srv://{db_user}:{db_password}@cluster0.cgxkcwy.mongodb.net/?retryWrites=true&w=majority'
+    client = MongoClient(uri, server_api=ServerApi('1'))
+
+    # Test MongoDB connection
+    try:
+        client.admin.command('ping')
+        logging.info('Pinged MongoDB!')
+    except Exception as e:
+        logging.error(f'MongoDB ping failed: {e}')
+
+    return client
 
 
-def save_rank(queue, summoner_puuid, tier, rank, lp):
-    if queue == "RANKED_SOLO_5x5":
-        tabel = "rank_solo"
-    elif queue == "RANKED_FLEX_SR":
-        tabel = "rank_flex"
-    else:
-        return
+def update_all_summoners(client, lol_watcher):
+    '''Update all summoners in the database.'''
+    summoner_collection = client['rank-crawler']['summoners']
 
-    conn = sqlite3.connect('data.db')
-    c = conn.cursor()
-
-    # Check if this is the first time we are saving a rank for this summoner
-    c.execute(f"SELECT * FROM {tabel} WHERE puuid = '{summoner_puuid}'")
-    if c.fetchone() is not None:
-        # Check if the rank has changed since the last time we checked
-        c.execute(f"SELECT * FROM {tabel} WHERE puuid = '{summoner_puuid}' ORDER BY timestamp DESC LIMIT 1")
-        last_rank = c.fetchone()
-        if last_rank is not None:
-            if last_rank[2] == tier and last_rank[3] == rank and last_rank[4] == lp:
-                return
-
-    # Save the rank
-    c.execute(f"INSERT INTO {tabel} VALUES (?, ?, ?, ?, ?)", (summoner_puuid, int(time.time()), tier, rank, lp))
-    conn.commit()
-    conn.close()
-    print(f"{bcolors.OKGREEN}[{time.strftime('%Y-%m-%d %H:%M:%S')}] Successfully saved rank for {summoner_puuid}{bcolors.ENDC}")
-
-def check_ranks():
-    print()
-    for summoner in SUMMONERS:
-        summoner_id = summoner["id"]
-        summoner_puuid = summoner["puuid"]
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking rank for {summoner_puuid}")
-        url = f"https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_id}?api_key={RIOT_API_KEY}"
+    # Get all summoners from the database
+    summoners = summoner_collection.find()
+    for summoner in summoners:
+        # Get data
         try:
-            response = requests.get(url)
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            print(f"{bcolors.FAIL}Error getting rank for {summoner_puuid}: {err}{bcolors.ENDC}")
+            summoner_data = lol_watcher.summoner.by_name(summoner['platform'], summoner['name'])
+            league_entries = lol_watcher.league.by_summoner(summoner['platform'], summoner_data['id'])
+        except ApiError as api_error:
+            logging.error(f'API Error: {api_error}')
             continue
-        data = response.json()
-        for queue in data:
-            if queue["queueType"] == "RANKED_SOLO_5x5" or queue["queueType"] == "RANKED_FLEX_SR":
-                tier = queue["tier"]
-                rank = queue["rank"]
-                lp = queue["leaguePoints"]
-                queue_type = queue["queueType"]
-                save_rank(queue_type, summoner_puuid, tier, rank, lp)
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Rank check complete")
+        
+        # Remove unnecessary fields from league_entries
+        for league_entry in league_entries:
+            del league_entry['summonerId']
+            del league_entry['summonerName']
+
+        # Enrich summoner data
+        summoner_data['platform'] = summoner['platform']
+        summoner_data['league_entries'] = league_entries
+
+
+        # Check if summoner data has changed
+        summoner_copy = summoner.copy()
+        del summoner_copy['_id']
+        if summoner_data == summoner_copy:
+            logging.info(f'Summoner {summoner_copy["name"]} has not changed')
+            continue
+
+
+        # Show what exactly has changed
+        for key in summoner_data:
+            if summoner_data[key] != summoner[key]:
+                logging.info(f'{key} has changed from {summoner[key]} to {summoner_data[key]}')
+
+        # Update summoner data
+        summoner_collection.update_one({'_id': summoner['_id']}, {'$set': summoner_data})
+        logging.info(f'Updated summoner {summoner["name"]}')
+
+    logging.info('Finished updating all summoners!')
 
 
 def main():
-    check_ranks()
+    # Set up MongoDB connection
+    client = setup_mongodb_connection(DB_USER, DB_PASSWORD)
 
+    # Set up Riot API connection
+    lol_watcher = LolWatcher(RIOT_API_KEY)
 
-if __name__ == "__main__":
-    for minute in range(0, 60, 5):
-        schedule.every().hour.at(f":{minute:02d}").do(main)
+    # Update all summoners
+    update_all_summoners(client, lol_watcher)
 
+    # Update all summoners every 5 minutes
+    schedule.every(5).minutes.at(':00').do(update_all_summoners, client, lol_watcher)
+
+    # Run scheduled jobs
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+
+if __name__ == '__main__':
+    main()

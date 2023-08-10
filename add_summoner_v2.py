@@ -1,5 +1,4 @@
 import logging
-import sys
 import os
 import argparse
 from dotenv import load_dotenv
@@ -84,6 +83,9 @@ def main():
 
     # Save summoner to database
     save_summoner_to_database(client, args.name, args.region, lol_watcher)
+
+    # Close MongoDB connection
+    client.close()
 
 
 if __name__ == '__main__':
