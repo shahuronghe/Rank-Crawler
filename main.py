@@ -23,7 +23,7 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 
 # Configure logging
 logging.basicConfig(filename='logs/main.log', format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
-
+logging.getLogger('riotwatcher').setLevel(logging.ERROR)
 
 def setup_mongodb_connection(db_user, db_password):
     '''Set up MongoDB connection.'''

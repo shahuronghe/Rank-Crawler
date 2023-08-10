@@ -18,6 +18,7 @@ REGIONS = ['br1', 'eun1', 'euw1', 'jp1', 'kr', 'la1', 'la2', 'na1', 'oc1', 'tr1'
 
 # Configure logging
 logging.basicConfig(filename='logs/add_summoner_v2.log', format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.getLogger('riotwatcher').setLevel(logging.ERROR)
 
 
 def setup_mongodb_connection(db_user, db_password):
