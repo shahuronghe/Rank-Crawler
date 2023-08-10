@@ -1,167 +1,93 @@
-import requests
-from dotenv import load_dotenv
+import logging
 import os
-import sys
-
+import argparse
+from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+from riotwatcher import LolWatcher, ApiError
 
-from utils.routing import platform_to_region
 
-
-# Setup
+# Load environment variables
 load_dotenv()
 RIOT_API_KEY = os.getenv('RIOT_API_KEY')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 
-# Replace the placeholder with your Atlas connection string
-uri = f"mongodb+srv://{DB_USER}:{DB_PASSWORD}@cluster0.cgxkcwy.mongodb.net/?retryWrites=true&w=majority"
+# Static variables
+REGIONS = ['br1', 'eun1', 'euw1', 'jp1', 'kr', 'la1', 'la2', 'na1', 'oc1', 'tr1', 'ru', 'ph2', 'sg2', 'th2', 'tw2', 'vn2']
 
-# Set the Stable API version when creating a new client
-client = MongoClient(uri, server_api=ServerApi('1'))
-
-# Send a ping to confirm a successful connection
-try:
-    client.admin.command('ping')
-    print("Pinged MongoDB!")
-except Exception as e:
-    print(e)
-
-def save_matches(summoner_name, platform):
-    """
-    Get all matches from a summoner and save them to the database
-    TO the latest soloq and flexq match add the rank of the summoner
-
-    example:
-    participants[0]["rank"] = {
-        "tier": "PLATINUM",
-        "rank": "I",
-        "leaguePoints": 100,
-    }
-    """
-    first_soloq_match = True
-    first_flexq_match = True
-
-    # Get summoner data from database
-    collection = client["rank-crawler"]["summoners"]
-    summoner = collection.find_one({"name": summoner_name, "platform": platform})
-
-    # Get all matches from summoner
-    start = 0
-    count = 100
-    while True:
-        url = f"https://{platform_to_region(platform)}.api.riotgames.com/lol/match/v5/matches/by-puuid/{summoner['puuid']}/ids?start={start}&count={count}&api_key={RIOT_API_KEY}"
-        response = requests.get(url)
-        match_ids = response.json()
-
-        # If there are no more matches, break
-        if not match_ids:
-            break
-
-        # Get match data for each match
-        for match_id in match_ids:
-            url = f"https://{platform_to_region(platform)}.api.riotgames.com/lol/match/v5/matches/{match_id}?api_key={RIOT_API_KEY}"
-            response = requests.get(url)
-            match_data = response.json()
-
-            # Add rank to soloq match
-            if first_soloq_match and match_data["info"]["queueId"] == 420:
-                first_soloq_match = False
-                for rank in summoner["rank"]:
-                    if rank["queue"] == "RANKED_SOLO_5x5":
-                        match_data["rank"] = {
-                            "tier": rank["tier"],
-                            "division": rank["division"],
-                            "leaguePoints": rank["leaguePoints"],
-                        }
-
-            # Add rank to flexq match
-            if first_flexq_match and match_data["info"]["queueId"] == 440:
-                first_flexq_match = False
-                for rank in summoner["rank"]:
-                    if rank["queue"] == "RANKED_FLEX_SR":
-                        for participant in match_data["info"]["participants"]:
-                            if participant["summonerName"] == summoner_name:
-                                participant["rank"] = {
-                            "tier": rank["tier"],
-                            "division": rank["division"],
-                            "leaguePoints": rank["leaguePoints"],
-                        }
-
-            # Check if match already exists in database
-            collection = client["rank-crawler"]["matches"]
-            match = collection.find_one({"metadata.matchId": match_data["metadata"]["matchId"]})
-            if match:
-                print(f"    Match {match_id} already exists in database")
-                continue
-
-            # Add match to database
-            collection.insert_one(match_data)
-            print(f"    Successfully added match {match_id} to database")
-
-        # Increase start by count
-        start += count
+# Configure logging
+logging.basicConfig(filename='logs/add_summoner_v2.log', format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.getLogger('riotwatcher').setLevel(logging.ERROR)
 
 
+def setup_mongodb_connection(db_user, db_password):
+    '''Set up MongoDB connection.'''
+    uri = f'mongodb+srv://{db_user}:{db_password}@cluster0.cgxkcwy.mongodb.net/?retryWrites=true&w=majority'
+    client = MongoClient(uri, server_api=ServerApi('1'))
 
-def add_summoner(summoner_name, platform):
-    """
-    Get the summoner data from the Riot API and add enrich it with the rank data from the database
-    """
-    print(f"Trying to add {summoner_name} to database")
-    url = f"https://{platform}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{summoner_name}?api_key={RIOT_API_KEY}"
-    response = requests.get(url)
-    summoner_data = response.json()
+    # Test MongoDB connection
+    try:
+        client.admin.command('ping')
+        logging.info('Pinged MongoDB!')
+    except Exception as e:
+        logging.error(f'MongoDB ping failed: {e}')
 
-    collection = client["rank-crawler"]["summoners"]
+    return client
 
-    # Check if summoner already exists in database
-    summoner = collection.find_one({"id": summoner_data["id"]})
-    if summoner:
-        print(f"    {summoner_name} already exists in database")
+
+def save_summoner_to_database(client, summoner_name, platform, lol_watcher):
+    '''Saves a summoner to the database.'''
+    summoner_collection = client['rank-crawler']['summoners']
+
+    # Check if summoner is already in database
+    existing_summoner = summoner_collection.find_one({'name': summoner_name, 'platform': platform})
+    if existing_summoner:
+        logging.info('Summoner already in database!')
         return
-    
-    #Add platform to summoner_data
-    summoner_data["platform"] = platform
 
-    # Get rank
-    url = f"https://{platform}.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_data['id']}?api_key={RIOT_API_KEY}"
-    response = requests.get(url)
-    rank_data = response.json()
-    
-    # remove unnecessary data from rank_data
-    if rank_data:
-        for rank in rank_data:
-            rank.pop("summonerId")
-            rank.pop("summonerName")
+    try:
+        # Get summoner data
+        summoner_data = lol_watcher.summoner.by_name(platform, summoner_name)
+        summoner_data['platform'] = platform
 
-    # Add rank to summoner_data
-    summoner_data["rank"] = rank_data
+        # Get the league data
+        league_entries = lol_watcher.league.by_summoner(platform, summoner_data['id'])
 
-    # Add summoner to database
-    collection.insert_one(summoner_data)
-    print(f"Successfully added {summoner_name} to database")
+        # Remove unnecessary fields from league data
+        for league_entry in league_entries:
+            del league_entry['summonerId']
+            del league_entry['summonerName']
 
+        # Merge the league data into the summoner data
+        summoner_data['league_entries'] = league_entries
 
+        # Save summoner to database
+        summoner_collection.insert_one(summoner_data)
+        logging.info(f'Saved summoner {summoner_name} from platform {platform} to database.')
+    except ApiError as api_error:
+        logging.error(f'API Error: {api_error}')
 
 
 def main():
-    """
-    if len(sys.argv) != 3:
-        print('Usage: python add_summoner.py "<summoner_name>" "<platform>"')
-        sys.exit(1)
+    # Get summoner name and platform from command line arguments
+    parser = argparse.ArgumentParser(description='Add a summoner to the database.')
+    parser.add_argument('-name', type=str, required=True, help='The summoner name.')
+    parser.add_argument('-region', type=str, required=True, help='The platform.', choices=REGIONS)
+    args = parser.parse_args()
 
-    
-    summoner_name = sys.argv[1]
-    platform = sys.argv[2]
-    """
-    summoner_name = "G5 Easy"
-    platform = "euw1"
+    # Set up MongoDB connection
+    client = setup_mongodb_connection(DB_USER, DB_PASSWORD)
 
-    add_summoner(summoner_name, platform)
-    save_matches(summoner_name, platform)
+    # Set up RiotWatcher
+    lol_watcher = LolWatcher(RIOT_API_KEY)
+
+    # Save summoner to database
+    save_summoner_to_database(client, args.name, args.region, lol_watcher)
+
+    # Close MongoDB connection
+    client.close()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
