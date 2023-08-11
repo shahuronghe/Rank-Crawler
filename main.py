@@ -7,7 +7,6 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from riotwatcher import LolWatcher, ApiError
 
-
 '''
 This script updates summoner and league data for registered summoners in a MongoDB database using the Riot Games API.
 It retrieves summoner information and league entries for each summoner, compares the data with the existing records in the database,
@@ -64,7 +63,6 @@ def update_all_summoners(client, lol_watcher):
         summoner_data['platform'] = summoner['platform']
         summoner_data['league_entries'] = league_entries
 
-
         # Check if summoner data has changed
         summoner_copy = summoner.copy()
         del summoner_copy['_id']
@@ -72,15 +70,20 @@ def update_all_summoners(client, lol_watcher):
             logging.info(f'Summoner {summoner_copy["name"]} has not changed')
             continue
 
-
         # Show what exactly has changed
+        change = False
         for key in summoner_data:
             if summoner_data[key] != summoner_copy[key]:
+                if key == "league_entries" and [i for i in summoner_data[key] if i not in summoner_copy[key]] == []:
+                    break
                 logging.info(f'{key} has changed from {summoner_copy[key]} to {summoner_data[key]}')
+                change = True
+                break
 
         # Update summoner data
-        summoner_collection.update_one({'_id': summoner['_id']}, {'$set': summoner_data})
-        logging.info(f'Updated summoner {summoner["name"]}')
+        if change:
+            summoner_collection.update_one({'_id': summoner['_id']}, {'$set': summoner_data})
+            logging.info(f'Updated summoner {summoner["name"]}')
 
     logging.info('Finished updating all summoners!')
 
