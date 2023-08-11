@@ -47,6 +47,7 @@ def update_all_summoners(client, lol_watcher):
     # Get all summoners from the database
     summoners = summoner_collection.find()
     for summoner in summoners:
+        logging.info(f'Updating summoner {summoner["name"]}...')
         # Get data
         try:
             summoner_data = lol_watcher.summoner.by_name(summoner['platform'], summoner['name'])
