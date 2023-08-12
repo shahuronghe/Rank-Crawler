@@ -24,6 +24,7 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 logging.basicConfig(filename='logs/main.log', format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logging.getLogger('riotwatcher').setLevel(logging.ERROR)
 
+
 def setup_mongodb_connection(db_user, db_password):
     '''Set up MongoDB connection.'''
     uri = f'mongodb+srv://{db_user}:{db_password}@cluster0.cgxkcwy.mongodb.net/?retryWrites=true&w=majority'
@@ -46,6 +47,7 @@ def update_all_summoners(client, lol_watcher):
     # Get all summoners from the database
     summoners = summoner_collection.find()
     for summoner in summoners:
+        logging.info(f'Updating summoner {summoner["name"]}...')
         # Get data
         try:
             summoner_data = lol_watcher.summoner.by_name(summoner['platform'], summoner['name'])
@@ -53,7 +55,7 @@ def update_all_summoners(client, lol_watcher):
         except ApiError as api_error:
             logging.error(f'API Error: {api_error}')
             continue
-        
+
         # Remove unnecessary fields from league_entries
         for league_entry in league_entries:
             del league_entry['summonerId']
@@ -66,24 +68,21 @@ def update_all_summoners(client, lol_watcher):
         # Check if summoner data has changed
         summoner_copy = summoner.copy()
         del summoner_copy['_id']
-        if summoner_data == summoner_copy:
+        if sorted(summoner_data) == sorted(summoner_copy):
             logging.info(f'Summoner {summoner_copy["name"]} has not changed')
             continue
 
         # Show what exactly has changed
-        change = False
+        logging.info(f'Summoner {summoner_copy["name"]} has changed:')
         for key in summoner_data:
-            if summoner_data[key] != summoner_copy[key]:
-                if key == "league_entries" and [i for i in summoner_data[key] if i not in summoner_copy[key]] == []:
-                    break
+            if key not in summoner_copy:
+                logging.info(f'{key} has been added')
+            elif summoner_data[key] != summoner_copy[key]:
                 logging.info(f'{key} has changed from {summoner_copy[key]} to {summoner_data[key]}')
-                change = True
-                break
 
         # Update summoner data
-        if change:
-            summoner_collection.update_one({'_id': summoner['_id']}, {'$set': summoner_data})
-            logging.info(f'Updated summoner {summoner["name"]}')
+        summoner_collection.update_one({'_id': summoner['_id']}, {'$set': summoner_data})
+        logging.info(f'Updated summoner {summoner["name"]}')
 
     logging.info('Finished updating all summoners!')
 
